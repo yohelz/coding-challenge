@@ -34,3 +34,4 @@ docker compose up --build
 ### Optional
 
 Refactor the code in `processor/src/app.py`, ensuring it is efficient and uses batching to improve performance.
+Create a UI to interact with the system.
