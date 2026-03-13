@@ -220,7 +220,7 @@ def terminal_querys(es: Elasticsearch):
 
 
 def main() -> None:
-    es = Elasticsearch(ELASTICSEARCH_URL, basic_auth=(ELASTIC_USER, ELASTIC_PASS))
+    es = Elasticsearch(ELASTICSEARCH_URL)
     create_index(es, INDEX_NAME)
     documents = load_json_files(INPUT_DIR)
 
@@ -235,7 +235,7 @@ def main() -> None:
     
     helpers.bulk(es, built_docs)
     terminal_querys(es)
-    tkinter_app(es)
+    #tkinter_app(es)
             
     
 

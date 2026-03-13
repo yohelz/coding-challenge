@@ -1,5 +1,5 @@
 customtkinter==5.2.2
-elasticsearch==9.3.0
+elasticsearch==8.15.0
 Requests==2.32.5
 rich==14.3.3
 sentence_splitter==1.4

@@ -6,6 +6,8 @@ RUN apt-get update && apt-get install -y \
     gcc \
     build-essential \
     curl \
+    python3-tk \
+    tk-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
