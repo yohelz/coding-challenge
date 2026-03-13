@@ -1,6 +1,5 @@
 import json
 import os
-import customtkinter as ctk
 from pathlib import Path
 from typing import List, Dict, Any
 from unidecode  import unidecode
@@ -14,8 +13,6 @@ from sentence_splitter import SentenceSplitter
 from sentence_transformers import SentenceTransformer
 
 ELASTICSEARCH_URL = os.getenv("ELASTICSEARCH_URL", "http://elasticsearch:9200")
-ELASTIC_USER = os.getenv("ELASTIC_USER", "username")
-ELASTIC_PASS = os.getenv("ELASTIC_PASS", "password")
 INPUT_DIR = os.getenv("INPUT_DIR", "/app/input")
 INDEX_NAME = os.getenv("INDEX_NAME", "documents")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
@@ -147,50 +144,6 @@ def semantic_search(es: Elasticsearch, index_name: str, query_text: str, k: int 
     }
 
     return es.search(index=index_name, body=body).body
-
-def tkinter_app(es):
-    app = ctk.CTk()
-    app.title("Book shelf tool")
-    app.geometry("1000x1000")
-
-    ctk.CTkLabel(app, text="Enter the query: ").pack(pady=(10, 0))
-    txt_input = ctk.CTkEntry(app, width=350)
-    txt_input.pack(pady=5)
-    
-    ctk.CTkLabel(app, text="Enter the number of neighbors: ").pack(pady=(10, 0))
-    neighbors_input = ctk.CTkEntry(app, width=350)
-    neighbors_input.pack(pady=5)
-    
-    ctk.CTkLabel(app, text="Enter the number of candidates: ").pack(pady=(10, 0))
-    cand_input = ctk.CTkEntry(app, width=350)
-    cand_input.pack(pady=5)
-    
-    result_box = ctk.CTkTextbox(app, width=700, height=250)
-    result_box.pack(pady=5)
-
-    def on_click():
-        query = txt_input.get()
-        n = neighbors_input.get()
-        c = cand_input.get()
-        if n.isdigit() and c.isdigit():
-            result = semantic_search(es, index_name=INDEX_NAME, query_text=query, k=int(n), candidates=int(c))
-            hits = result['hits']['hits']
-            
-            text = ""
-            for i, hit in enumerate(hits, 1):
-                
-                text = text + f"Result number #{i}\nScore: {hit['_score']}\nData: {hit['_source']}\n\n"
-                
-            result_box.delete("0.0", "end")
-            result_box.insert("0.0", text)
-        else:
-            result_box.delete("0.0", "end")
-            result_box.insert("0.0", "ERROR: You need to enter a integer as a value for neighbors or candidates.")
-
-    btn = ctk.CTkButton(app, text="Buscar", command=on_click)
-    btn.pack(pady=20)
-
-    app.mainloop()
             
 
 def terminal_querys(es: Elasticsearch):
@@ -235,7 +188,6 @@ def main() -> None:
     
     helpers.bulk(es, built_docs)
     terminal_querys(es)
-    #tkinter_app(es)
             
     
 
