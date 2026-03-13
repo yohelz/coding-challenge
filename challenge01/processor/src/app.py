@@ -1,10 +1,15 @@
 import json
 import os
+import customtkinter as ctk
 from pathlib import Path
 from typing import List, Dict, Any
 from unidecode  import unidecode
+from rich import print as rprint
+from rich.panel import Panel
+from rich.console import Console
 
-from elasticsearch import Elasticsearch
+
+from elasticsearch import Elasticsearch, helpers
 from sentence_splitter import SentenceSplitter
 from sentence_transformers import SentenceTransformer
 
@@ -99,41 +104,35 @@ def proccess_documents(document: Dict[str, Any]) -> List[Dict[str, Any]]:
         raise ValueError("Document must contain at least 'id' and 'description'")
 
     chunks = split_into_chunks(description)
-    result = []
+    actions = []
 
     for idx, chunk in enumerate(chunks):
-        embedding = generate_embedding(chunk)
-        result.append({
-            "doc_id": str(doc_id),
-            "chunk_id": f"{doc_id}-{idx}",
-            "doc_title": title,
-            "doc_description": chunk,
-            "doc_authors": authors,
-            "doc_first_publish_year": year,
-            "doc_subjects": subjects,
-            "doc_language": language,
-            "doc_openlibrary_url": url,
-            "embedding": embedding
-        })
-
-    return result
+        actions.append({
+            "_index": INDEX_NAME,
+            "_id": f"{doc_id}-{idx}",
+            "_source": {
+                "doc_id": str(doc_id),
+                "chunk_id": f"{doc_id}-{idx}",
+                "doc_title": title,
+                "doc_description": chunk,
+                "doc_authors": authors,
+                "doc_first_publish_year": year,
+                "doc_subjects": subjects,
+                "doc_language": language,
+                "doc_openlibrary_url": url,
+                "embedding": generate_embedding(chunk)
+                }})
+        
+    return actions
 
 def ensure_capitalize(subjects: list[str]) -> list[str]:
     return [subject.capitalize() for subject in subjects]
 
 def clean_non_ascii(text: str) -> str:
     return unidecode(text)
-    
-
-def index_documents(es: Elasticsearch, index_name: str, docs: List[Dict[str, Any]]) -> None:
-    
-    for doc in docs:
-        doc_id = doc.get("chunk_id")
-        es.index(index=index_name, document=doc, id=doc_id)
-    return
 
 
-def semantic_search(es: Elasticsearch, index_name: str, query_text: str, k: int = 3) -> Dict[str, Any]:
+def semantic_search(es: Elasticsearch, index_name: str, query_text: str, k: int = 5, candidates: int = 50) -> Dict[str, Any]:
     # Query to perform semantic search
     query_vector = generate_embedding(query_text)
 
@@ -142,12 +141,82 @@ def semantic_search(es: Elasticsearch, index_name: str, query_text: str, k: int 
             "field": "embedding",
             "query_vector": query_vector,
             "k": k,
-            "num_candidates": 10
+            "num_candidates": candidates
         },
         "_source": ["doc_id", "chunk_id", "doc_title", "content"]
     }
 
     return es.search(index=index_name, body=body).body
+
+def tkinter_app(es):
+    app = ctk.CTk()
+    app.title("Book shelf tool")
+    app.geometry("1000x1000")
+
+    ctk.CTkLabel(app, text="Enter the query: ").pack(pady=(10, 0))
+    txt_input = ctk.CTkEntry(app, width=350)
+    txt_input.pack(pady=5)
+    
+    ctk.CTkLabel(app, text="Enter the number of neighbors: ").pack(pady=(10, 0))
+    neighbors_input = ctk.CTkEntry(app, width=350)
+    neighbors_input.pack(pady=5)
+    
+    ctk.CTkLabel(app, text="Enter the number of candidates: ").pack(pady=(10, 0))
+    cand_input = ctk.CTkEntry(app, width=350)
+    cand_input.pack(pady=5)
+    
+    result_box = ctk.CTkTextbox(app, width=700, height=250)
+    result_box.pack(pady=5)
+
+    def on_click():
+        query = txt_input.get()
+        n = neighbors_input.get()
+        c = cand_input.get()
+        if n.isdigit() and c.isdigit():
+            result = semantic_search(es, index_name=INDEX_NAME, query_text=query, k=int(n), candidates=int(c))
+            hits = result['hits']['hits']
+            
+            text = ""
+            for i, hit in enumerate(hits, 1):
+                
+                text = text + f"Result number #{i}\nScore: {hit['_score']}\nData: {hit['_source']}\n\n"
+                
+            result_box.delete("0.0", "end")
+            result_box.insert("0.0", text)
+        else:
+            result_box.delete("0.0", "end")
+            result_box.insert("0.0", "ERROR: You need to enter a integer as a value for neighbors or candidates.")
+
+    btn = ctk.CTkButton(app, text="Buscar", command=on_click)
+    btn.pack(pady=20)
+
+    app.mainloop()
+            
+
+def terminal_querys(es: Elasticsearch):
+    queries = ["A group of children who come across paranormal events",
+              "Person who suffers from psychological disorders",
+              "Narratives of ancient fantastic tales",
+              "Oriental poems",
+              "Horror and paranormal tales",
+              "Stories of the high seas"]
+    
+    console = Console()
+    for query in queries:
+        result = semantic_search(es, index_name=INDEX_NAME, query_text=query)
+        hits = result['hits']['hits']
+
+        console.print(f"[bold magenta]The result for: {query}[/bold magenta]")
+        
+        for i, hit in enumerate(hits, 1):
+            
+            rprint(Panel(
+                f"[bold cyan]Score:[/bold cyan] {hit['_score']}\n"
+                f"[bold cyan]Data:[/bold cyan] {hit['_source']}",
+                title=f"Result number #{i}",
+                border_style="green",
+                expand=False
+            ))
 
 
 def main() -> None:
@@ -159,14 +228,16 @@ def main() -> None:
         print("No JSON files found.")
         return
 
+    built_docs = []
     for document in documents:
-        built_docs = proccess_documents(document)
-        index_documents(es, INDEX_NAME, built_docs)
-
-    print("Semantic search: examples")
-
-    # TODO: Create several semantic search queries and print the results.
-    # Use the function semantic_search()
+        built_docs.extend(proccess_documents(document))
+    
+    
+    helpers.bulk(es, built_docs)
+    terminal_querys(es)
+    tkinter_app(es)
+            
+    
 
 
 if __name__ == "__main__":
